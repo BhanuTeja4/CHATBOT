@@ -1,37 +1,42 @@
 import streamlit as st
-from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch
-import warnings
+import requests
 
-# Suppress the padding warning messages
-warnings.filterwarnings("ignore", category=UserWarning)
+API_ENDPOINT = "https://api-inference.huggingface.co/models/OpenAssistant/oasst-sft-4-pythia-12b-epoch-3.5"
+API_KEY = "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"
 
-model_name = "microsoft/DialoGPT-medium"
+def generate_response(messages):
+    headers = {
+        "Authorization": f"Bearer {API_KEY}"
+    }
 
-tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
-model = AutoModelForCausalLM.from_pretrained(model_name)
+    inputs = "\n".join(message["content"] for message in messages)
 
-st.title("Chatbot")
+    payload = {
+        "model": "facebook/blenderbot-400M-distill",
+        "inputs": inputs,
+        "parameters": {
+            "max_new_tokens": 1024,
+            "typical_p": 0.2,
+            "repetition_penalty": 1,
+            "truncate": 1000,
+            "return_full_text": False
+        }
+    }
 
-chat_history_ids = None
+    response = requests.post(API_ENDPOINT, json=payload, headers=headers)
+    return response.json()
 
-while True:
-    user_input = st.text_input("You:", "")
-    
-    if user_input:
-        input_ids = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors="pt")
+def main():
+    st.title("ChatBot")
 
-        bot_input_ids = torch.cat([chat_history_ids, input_ids], dim=-1) if chat_history_ids is not None else input_ids
+    user_input = st.text_area("You:", "")
+    if st.button("Chat here"):
+        messages = [
+            {"role": "user", "content": user_input}
+        ]
+        response = generate_response(messages)
+        bot_reply = response[0]['generated_text']
+        st.text(f"Chatbot: {bot_reply}")
 
-        chat_history_ids = model.generate(
-            bot_input_ids,
-            max_length=1000,
-            pad_token_id=tokenizer.eos_token_id,
-        )
-
-        bot_response = tokenizer.decode(chat_history_ids[:, bot_input_ids.shape[-1]:][0], skip_special_tokens=True)
-
-        st.text("BOT:")
-
-        if bot_response:
-            st.text(bot_response)
+if __name__ == "__main__":
+    main()
